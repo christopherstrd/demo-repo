@@ -1,0 +1,53 @@
+﻿import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitServices')
+
+
+from Autodesk.Revit.DB import *
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+
+# Inputs
+columns = UnwrapElement(IN[0])
+baseLevelRef = UnwrapElement(IN[1])  # Your reference level (e.g., "1FL")
+doc = DocumentManager.Instance.CurrentDBDocument
+
+
+# Get elevation of 1FL level
+refElev = baseLevelRef.Elevation
+
+
+bottomOffsets = []
+topOffsets = []
+
+
+for col in columns:
+    try:
+        # Get base/top levels
+        baseLvlId = col.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_PARAM).AsElementId()
+        topLvlId = col.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_PARAM).AsElementId()
+
+
+        baseOffset = col.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM).AsDouble()
+        topOffset = col.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM).AsDouble()
+
+
+        baseLevel = doc.GetElement(baseLvlId)
+        topLevel = doc.GetElement(topLvlId)
+
+
+        # Calculate absolute elevations
+        baseZ = baseLevel.Elevation + baseOffset
+        topZ = topLevel.Elevation + topOffset
+
+
+        # Relative to 1FL
+        bottomOffsets.append(baseZ - refElev)
+        topOffsets.append(topZ - refElev)
+    except:
+        bottomOffsets.append(None)
+        topOffsets.append(None)
+
+
+OUT = (bottomOffsets, topOffsets)
