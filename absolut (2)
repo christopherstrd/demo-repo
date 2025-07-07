@@ -1,0 +1,77 @@
+﻿import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitServices')
+
+
+from Autodesk.Revit.DB import *
+from RevitServices.Persistence import DocumentManager
+
+
+# Get Revit document
+doc = DocumentManager.Instance.CurrentDBDocument
+
+
+# Inputs
+columns = UnwrapElement(IN[0])  # List of columns
+level_ref = UnwrapElement(IN[1])  # 1FL Level element
+ref_elev_ft = level_ref.Elevation  # Elevation of 1FL (in feet)
+
+
+# Output lists
+bottom_mm = []
+top_mm = []
+
+
+# Conversion factor: 1 ft = 304.8 mm
+FT_TO_MM = 304.8
+
+
+for col in columns:
+    try:
+        loc = col.Location
+
+
+        # Try to use geometry (LocationCurve)
+        if isinstance(loc, LocationCurve):
+            p0 = loc.Curve.GetEndPoint(0)
+            p1 = loc.Curve.GetEndPoint(1)
+            z0 = p0.Z
+            z1 = p1.Z
+
+
+            bottom_z = min(z0, z1)
+            top_z = max(z0, z1)
+
+
+        else:
+            # Fallback to parameters
+            base_lvl_id = col.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_PARAM).AsElementId()
+            top_lvl_id = col.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_PARAM).AsElementId()
+            base_offset = col.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM).AsDouble()
+            top_offset = col.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM).AsDouble()
+
+
+            base_lvl = doc.GetElement(base_lvl_id)
+            top_lvl = doc.GetElement(top_lvl_id)
+
+
+            bottom_z = base_lvl.Elevation + base_offset
+            top_z = top_lvl.Elevation + top_offset
+
+
+        # Convert to mm and compute relative to 1FL
+        bottom_relative_mm = (bottom_z - ref_elev_ft) * FT_TO_MM
+        top_relative_mm = (top_z - ref_elev_ft) * FT_TO_MM
+
+
+        bottom_mm.append(bottom_relative_mm)
+        top_mm.append(top_relative_mm)
+
+
+    except:
+        bottom_mm.append(None)
+        top_mm.append(None)
+
+
+# Output: (BottomZ in mm, TopZ in mm)
+OUT = (bottom_mm, top_mm)
